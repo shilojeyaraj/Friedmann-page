@@ -7,13 +7,23 @@ const router = Router();
 
 // Chat endpoint
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { message, conversationId, clientName } = req.body;
+  const { message, conversationId, conversation_id, clientName } = req.body;
+
+  // Log incoming request
+  console.log('📨 Incoming chat request:', {
+    message: message?.substring(0, 100) + (message?.length > 100 ? '...' : ''),
+    conversationId: conversationId || conversation_id,
+    clientName,
+    timestamp: new Date().toISOString()
+  });
 
   if (!message || typeof message !== 'string') {
     throw createError('Message is required', 400);
   }
 
-  if (!conversationId || typeof conversationId !== 'string') {
+  // Support both conversationId and conversation_id for compatibility
+  const actualConversationId = conversationId || conversation_id;
+  if (!actualConversationId || typeof actualConversationId !== 'string') {
     throw createError('Conversation ID is required', 400);
   }
 
@@ -21,7 +31,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     // Add user message to memory
-    await memoryManager.addMessage(conversationId, 'user', message);
+    await memoryManager.addMessage(actualConversationId, 'user', message);
 
     // Generate AI response
     const prompt = `
@@ -34,11 +44,19 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       Keep your response concise but comprehensive.
     `;
 
+    console.log('🤖 Generating AI response...');
     const result = await model.generateContent(prompt);
     const response = result.response.text();
 
+    // Log AI response
+    console.log('🤖 AI Response:', {
+      content: response.substring(0, 100) + (response.length > 100 ? '...' : ''),
+      conversationId: actualConversationId,
+      timestamp: new Date().toISOString()
+    });
+
     // Add AI response to memory
-    await memoryManager.addMessage(conversationId, 'assistant', response);
+    await memoryManager.addMessage(actualConversationId, 'assistant', response);
 
     res.json({
       success: true,
@@ -46,7 +64,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
         content: response,
         citations: [],
       },
-      conversationId,
+      conversationId: actualConversationId,
     });
   } catch (error) {
     console.error('❌ Error in chat endpoint:', error);

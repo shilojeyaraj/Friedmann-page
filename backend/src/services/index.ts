@@ -15,16 +15,16 @@ export async function initializeServices(): Promise<void> {
   console.log('🔄 Initializing services...');
 
   // Initialize Google Gemini
-  if (!process.env.GOOGLE_API_KEY) {
+  if (!process.env['GOOGLE_API_KEY']) {
     throw new Error('GOOGLE_API_KEY environment variable is required');
   }
   
-  googleAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+  googleAI = new GoogleGenerativeAI(process.env['GOOGLE_API_KEY']);
   console.log('✅ Google Gemini initialized successfully');
 
   // Initialize Supabase
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
-    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  if (process.env['SUPABASE_URL'] && process.env['SUPABASE_KEY']) {
+    supabase = createClient(process.env['SUPABASE_URL'], process.env['SUPABASE_KEY']);
     console.log('✅ Supabase initialized successfully');
   } else {
     console.log('⚠️ SUPABASE_URL or SUPABASE_KEY not found in environment variables');

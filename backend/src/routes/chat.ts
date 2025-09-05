@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { googleAI } from '../services/index';
+import { openai } from '../services/index';
 import { memoryManager } from '../services/index';
 import { asyncHandler, createError } from '../middleware/errorHandler';
 
@@ -27,26 +27,31 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     throw createError('Conversation ID is required', 400);
   }
 
-  const model = googleAI.getGenerativeModel({ model: 'gemini-pro' });
-
   try {
     // Add user message to memory
     await memoryManager.addMessage(actualConversationId, 'user', message);
 
     // Generate AI response
-    const prompt = `
-      You are a professional financial advisor. Respond to the client's message in a helpful, informative, and professional manner.
-      
-      Client: ${clientName || 'Client'}
-      Message: ${message}
-      
-      Please provide a thoughtful response that addresses their financial concerns or questions.
-      Keep your response concise but comprehensive.
-    `;
+    const messages = [
+      {
+        role: 'system' as const,
+        content: `You are a professional financial advisor. Respond to the client's message in a helpful, informative, and professional manner. Keep your response concise but comprehensive.`
+      },
+      {
+        role: 'user' as const,
+        content: `Client: ${clientName || 'Client'}\nMessage: ${message}`
+      }
+    ];
 
     console.log('🤖 Generating AI response...');
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: messages,
+      max_tokens: 1000,
+      temperature: 0.7,
+    });
+    
+    const response = completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response.';
 
     // Log AI response
     console.log('🤖 AI Response:', {

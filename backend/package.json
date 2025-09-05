@@ -23,6 +23,7 @@
     "@langchain/community": "^0.3.54",
     "@langchain/core": "^0.3.73",
     "@langchain/google-genai": "^0.0.6",
+    "@langchain/openai": "^0.6.11",
     "@supabase/supabase-js": "^2.57.0",
     "@types/luxon": "^3.7.1",
     "bcryptjs": "^2.4.3",
@@ -37,6 +38,7 @@
     "luxon": "^3.4.4",
     "morgan": "^1.10.0",
     "nodemailer": "^6.9.7",
+    "openai": "^5.19.1",
     "socket.io": "^4.7.4",
     "supabase": "^1.183.1",
     "uuid": "^9.0.1"

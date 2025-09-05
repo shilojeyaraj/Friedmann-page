@@ -1,11 +1,15 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import dotenv from 'dotenv';
+import OpenAI from 'openai';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EmailService } from './emailService';
 import { MemoryManager } from './memoryManager';
 import { ReportService } from './reportService';
 
+// Load environment variables
+dotenv.config();
+
 // Global service instances
-export let googleAI: GoogleGenerativeAI;
+export let openai: OpenAI;
 export let supabase: SupabaseClient | null = null;
 export let emailService: EmailService;
 export let memoryManager: MemoryManager;
@@ -14,13 +18,15 @@ export let reportService: ReportService;
 export async function initializeServices(): Promise<void> {
   console.log('🔄 Initializing services...');
 
-  // Initialize Google Gemini
-  if (!process.env['GOOGLE_API_KEY']) {
-    throw new Error('GOOGLE_API_KEY environment variable is required');
+  // Initialize OpenAI
+  if (!process.env['OPENAI_API_KEY']) {
+    throw new Error('OPENAI_API_KEY environment variable is required');
   }
   
-  googleAI = new GoogleGenerativeAI(process.env['GOOGLE_API_KEY']);
-  console.log('✅ Google Gemini initialized successfully');
+  openai = new OpenAI({
+    apiKey: process.env['OPENAI_API_KEY'],
+  });
+  console.log('✅ OpenAI initialized successfully');
 
   // Initialize Supabase
   if (process.env['SUPABASE_URL'] && process.env['SUPABASE_KEY']) {

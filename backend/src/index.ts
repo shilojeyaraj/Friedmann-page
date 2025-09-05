@@ -19,19 +19,19 @@ const app = express();
 const server = createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: process.env['FRONTEND_URL'] || "http://localhost:3000",
     methods: ["GET", "POST"]
   }
 });
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env['PORT'] || 8000;
 
 // Middleware
 app.use(helmet());
 app.use(compression());
 app.use(morgan('combined'));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: process.env['FRONTEND_URL'] || "http://localhost:3000",
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -59,7 +59,7 @@ initializeServices()
       console.log(`🚀 Financial Assistant API running on port ${PORT}`);
       console.log(`🌐 Server: http://localhost:${PORT}`);
       console.log(`🔌 WebSocket support enabled`);
-      console.log(`🔑 API Key Status: ${process.env.GOOGLE_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+      console.log(`🔑 API Key Status: ${process.env['OPENAI_API_KEY'] ? '✅ Configured' : '❌ Missing'}`);
     });
   })
   .catch((error) => {

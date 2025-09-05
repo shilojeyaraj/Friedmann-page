@@ -1,4 +1,4 @@
-import { googleAI } from './index';
+import { openai } from './index';
 import { memoryManager } from './index';
 import { DateTime } from 'luxon';
 
@@ -91,35 +91,46 @@ export class ReportService {
     financialData: FinancialData,
     preferences?: string
   ): Promise<string> {
-    const model = googleAI.getGenerativeModel({ model: 'gemini-pro' });
-
-    const prompt = `
-      Generate a comprehensive financial report for ${clientName} based on the following conversation and financial data.
-      
-      ${preferences ? `Client Preferences: ${preferences}` : ''}
-      
-      Conversation History:
-      ${conversationText}
-      
-      Financial Data:
-      ${JSON.stringify(financialData, null, 2)}
-      
-      Please create a detailed financial report with the following sections:
-      1. Executive Summary
-      2. Financial Health Assessment
-      3. Recommended Investment Strategy
-      4. Risk Analysis
-      5. Retirement Planning
-      6. Tax Optimization Opportunities
-      7. Action Items and Next Steps
-      
-      Make the report professional, detailed, and actionable. Use only information from the conversation and financial data provided.
-      Format the response in markdown with clear headings and bullet points.
-    `;
-
     try {
-      const result = await model.generateContent(prompt);
-      return result.response.text();
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional financial advisor who creates comprehensive financial reports. Generate detailed, actionable reports based on client conversations and financial data. Format responses in markdown with clear headings and bullet points.'
+          },
+          {
+            role: 'user',
+            content: `
+              Generate a comprehensive financial report for ${clientName} based on the following conversation and financial data.
+              
+              ${preferences ? `Client Preferences: ${preferences}` : ''}
+              
+              Conversation History:
+              ${conversationText}
+              
+              Financial Data:
+              ${JSON.stringify(financialData, null, 2)}
+              
+              Please create a detailed financial report with the following sections:
+              1. Executive Summary
+              2. Financial Health Assessment
+              3. Recommended Investment Strategy
+              4. Risk Analysis
+              5. Retirement Planning
+              6. Tax Optimization Opportunities
+              7. Action Items and Next Steps
+              
+              Make the report professional, detailed, and actionable. Use only information from the conversation and financial data provided.
+              Format the response in markdown with clear headings and bullet points.
+            `
+          }
+        ],
+        max_tokens: 2000,
+        temperature: 0.7,
+      });
+
+      return completion.choices[0]?.message?.content || 'Unable to generate report';
     } catch (error) {
       console.error('❌ Error generating report content:', error);
       return this.getDefaultReportContent(clientName);

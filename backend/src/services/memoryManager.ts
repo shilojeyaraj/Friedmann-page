@@ -1,9 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
+import { OpenAIEmbeddings } from '@langchain/openai';
 import { Chroma } from '@langchain/community/vectorstores/chroma';
-import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
-import { googleAI } from './index';
+import { openai } from './index';
 
 export interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -13,16 +11,14 @@ export interface ConversationMessage {
 
 export class MemoryManager {
   private vectorstore: Chroma;
-  private textSplitter: RecursiveCharacterTextSplitter;
   private conversationHistories: Map<string, ConversationMessage[]> = new Map();
   private conversationSummaries: Map<string, string> = new Map();
   private pendingUserMessages: Map<string, string> = new Map();
 
   constructor() {
     // Initialize embeddings
-    const embeddings = new GoogleGenerativeAIEmbeddings({
-      model: 'models/embedding-001',
-      apiKey: process.env.GOOGLE_API_KEY!,
+    const embeddings = new OpenAIEmbeddings({
+      openAIApiKey: process.env['OPENAI_API_KEY']!,
     });
 
     // Initialize vector store
@@ -30,11 +26,7 @@ export class MemoryManager {
       collectionName: 'financial_conversations',
     });
 
-    // Initialize text splitter
-    this.textSplitter = new RecursiveCharacterTextSplitter({
-      chunkSize: 1000,
-      chunkOverlap: 200,
-    });
+    // Text splitter removed as it's not used in this implementation
   }
 
   public async addMessage(conversationId: string, role: 'user' | 'assistant', message: string): Promise<void> {
@@ -69,7 +61,7 @@ export class MemoryManager {
         // Add to vector store
         await this.vectorstore.addDocuments([
           {
-            pageContent: userDoc.content,
+            pageContent: typeof userDoc.content === 'string' ? userDoc.content : JSON.stringify(userDoc.content),
             metadata: {
               conversationId,
               role: 'user',
@@ -77,7 +69,7 @@ export class MemoryManager {
             },
           },
           {
-            pageContent: assistantDoc.content,
+            pageContent: typeof assistantDoc.content === 'string' ? assistantDoc.content : JSON.stringify(assistantDoc.content),
             metadata: {
               conversationId,
               role: 'assistant',
@@ -126,14 +118,27 @@ export class MemoryManager {
     }
 
     try {
-      const model = googleAI.getGenerativeModel({ model: 'gemini-pro' });
       const conversationText = history
         .map(msg => `${msg.role}: ${msg.content}`)
         .join('\n');
 
-      const prompt = `Please provide a concise summary of this financial conversation:\n\n${conversationText}`;
-      const result = await model.generateContent(prompt);
-      const summary = result.response.text();
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that summarizes financial conversations concisely.'
+          },
+          {
+            role: 'user',
+            content: `Please provide a concise summary of this financial conversation:\n\n${conversationText}`
+          }
+        ],
+        max_tokens: 500,
+        temperature: 0.3,
+      });
+      
+      const summary = completion.choices[0]?.message?.content || 'Unable to generate summary';
 
       this.conversationSummaries.set(conversationId, summary);
       return summary;
@@ -161,41 +166,53 @@ export class MemoryManager {
 
       console.log(`🔍 Conversation text extracted: ${conversationText.substring(0, 200)}...`);
 
-      const model = googleAI.getGenerativeModel({ model: 'gemini-pro' });
-      const prompt = `
-        Analyze this financial conversation and extract structured financial data. 
-        Only use information explicitly mentioned in the conversation. Do not add any fictional data.
-        
-        Conversation:
-        ${conversationText}
-        
-        Client: ${clientName}
-        
-        Please return a JSON object with this structure:
-        {
-          "assets": {
-            "rrsp": number,
-            "tfsa": number,
-            "investments": number,
-            "realEstate": number
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a financial data extraction assistant. Analyze conversations and extract structured financial data. Only use information explicitly mentioned. Return valid JSON only.'
           },
-          "liabilities": {
-            "mortgage": number,
-            "creditCard": number,
-            "loans": number
-          },
-          "goals": {
-            "retirement": number,
-            "education": number,
-            "emergency": number
+          {
+            role: 'user',
+            content: `
+              Analyze this financial conversation and extract structured financial data. 
+              Only use information explicitly mentioned in the conversation. Do not add any fictional data.
+              
+              Conversation:
+              ${conversationText}
+              
+              Client: ${clientName}
+              
+              Please return a JSON object with this structure:
+              {
+                "assets": {
+                  "rrsp": number,
+                  "tfsa": number,
+                  "investments": number,
+                  "realEstate": number
+                },
+                "liabilities": {
+                  "mortgage": number,
+                  "creditCard": number,
+                  "loans": number
+                },
+                "goals": {
+                  "retirement": number,
+                  "education": number,
+                  "emergency": number
+                }
+              }
+              
+              If no specific amounts are mentioned, use 0 for those fields.
+            `
           }
-        }
-        
-        If no specific amounts are mentioned, use 0 for those fields.
-      `;
-
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
+        ],
+        max_tokens: 1500,
+        temperature: 0.1,
+      });
+      
+      const responseText = completion.choices[0]?.message?.content || '{}';
       
       // Try to parse JSON from response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);

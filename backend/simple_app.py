@@ -5,13 +5,13 @@ from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
-import google.generativeai as genai
+import openai
 from dotenv import load_dotenv
 
 # LangChain imports
 from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory
 from langchain_community.vectorstores import Chroma
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain.schema import HumanMessage, AIMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import ConversationChain
@@ -43,21 +43,21 @@ CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "http://127
 # Initialize SocketIO for real-time communication
 socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"])  # Enable CORS for frontend ports
 
-# Initialize Gemini
-gemini_model = None
-google_api_key = os.getenv("GOOGLE_API_KEY")
+# Initialize OpenAI
+openai_model = None
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
-if google_api_key and google_api_key != "your_actual_gemini_api_key_here":
+if openai_api_key and openai_api_key != "your_openai_api_key_here":
     try:
-        genai.configure(api_key=google_api_key)
-        gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-        print("✅ Google Gemini initialized successfully")
+        openai.api_key = openai_api_key
+        openai_model = "gpt-4o-mini"
+        print("✅ OpenAI initialized successfully")
     except Exception as e:
-        print(f"⚠️ Error initializing Gemini: {e}")
-        gemini_model = None
+        print(f"⚠️ Error initializing OpenAI: {e}")
+        openai_model = None
 else:
-    print("⚠️ GOOGLE_API_KEY not found or not set properly")
-    print(f"Current key: {google_api_key[:10] + '...' if google_api_key else 'None'}")
+    print("⚠️ OPENAI_API_KEY not found or not set properly")
+    print(f"Current key: {openai_api_key[:10] + '...' if openai_api_key else 'None'}")
 
 # Initialize Supabase
 supabase = None
@@ -132,11 +132,10 @@ active_connections = {}
 # LangChain Memory System
 class ConversationMemoryManager:
     def __init__(self):
-        # Initialize embeddings for vector storage using Google Gemini
+        # Initialize embeddings for vector storage using OpenAI
         try:
-            self.embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/embedding-001",
-                google_api_key=os.getenv('GOOGLE_API_KEY')
+            self.embeddings = OpenAIEmbeddings(
+                openai_api_key=os.getenv('OPENAI_API_KEY')
             )
             self.vectorstore = Chroma(
                 collection_name="conversation_history",
@@ -454,7 +453,7 @@ def generate_financial_data_from_conversation(conversation_id, client_name):
         """
         
         try:
-            extracted_data = get_gemini_response(extraction_prompt)
+            extracted_data = get_openai_response(extraction_prompt)
             # Try to parse the JSON response
             import re
             json_match = re.search(r'\{.*\}', extracted_data, re.DOTALL)
@@ -626,21 +625,26 @@ def get_messages_from_db(client_id):
         print(f"Error fetching messages: {e}")
         return {"success": False, "error": str(e)}
 
-def get_gemini_response(message, system_prompt=None):
-    """Get response from Google Gemini API"""
-    if not gemini_model:
+def get_openai_response(message, system_prompt=None):
+    """Get response from OpenAI API"""
+    if not openai_model:
         return "I apologize, but I'm not properly configured. Please check the API key setup."
     
     try:
+        messages = []
         if system_prompt:
-            full_prompt = f"{system_prompt}\n\nUser: {message}"
-        else:
-            full_prompt = message
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": message})
             
-        response = gemini_model.generate_content(full_prompt)
-        return response.text
+        response = openai.chat.completions.create(
+            model=openai_model,
+            messages=messages,
+            max_tokens=1000,
+            temperature=0.7
+        )
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"Error calling Gemini: {e}")
+        print(f"Error calling OpenAI: {e}")
         return f"I encountered an error processing your request: {str(e)}"
 
 @app.route('/')
@@ -648,7 +652,7 @@ def home():
     return jsonify({
         "message": "Financial Assistant API Ready",
         "version": "1.0.0",
-        "gemini_status": "ready" if gemini_model else "not_configured",
+        "openai_status": "ready" if openai_model else "not_configured",
         "supabase_status": "ready" if supabase else "not_configured"
     })
 
@@ -820,7 +824,7 @@ Is there anything specific you'd like me to help you with regarding your financi
             
             Provide clear, actionable advice based on best practices. Always recommend consulting with a qualified financial advisor for major decisions."""
             
-            response = get_gemini_response(message, system_prompt)
+            response = get_openai_response(message, system_prompt)
         
         # Store assistant response in LangChain memory manager
         memory_manager.add_message(conversation_id, "assistant", response)
@@ -872,7 +876,7 @@ def generate_report():
         report_prompt = generate_custom_report_prompt(client_name, template_name, user_preference, conversation_id)
 
         
-        report_content = get_gemini_response(report_prompt)
+        report_content = get_openai_response(report_prompt)
         
         # Create report ID and store it
         report_id = str(uuid.uuid4())
@@ -1907,7 +1911,7 @@ Your restructuring preference has been saved for this conversation. Click the Ge
             else:
                 full_prompt = f"{system_prompt}\n\nUser message: {message}"
             
-            response = get_gemini_response(full_prompt)
+            response = get_openai_response(full_prompt)
         
         # Add assistant response to conversation history
         assistant_message = {
@@ -1972,7 +1976,7 @@ def handle_generate_report(data):
         report_prompt = generate_custom_report_prompt(client_name, template_name, user_preference, conversation_id)
         
         # Generate report content
-        report_content = get_gemini_response(report_prompt)
+        report_content = get_openai_response(report_prompt)
         
         # Create report ID and store it
         report_id = str(uuid.uuid4())
@@ -2020,7 +2024,7 @@ def handle_generate_report(data):
 
 if __name__ == '__main__':
     print("🚀 Starting Financial Assistant API with WebSocket support...")
-    print(f"🔑 API Key Status: {'✅ Configured' if gemini_model else '❌ Not configured'}")
+    print(f"🔑 API Key Status: {'✅ Configured' if openai_model else '❌ Not configured'}")
     print("🌐 Server starting on http://localhost:8000")
     print("🔌 WebSocket support enabled")
     socketio.run(app, host='0.0.0.0', port=8000, debug=True)
